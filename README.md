@@ -17,6 +17,7 @@ Codex 长任务可能因为 5 小时额度耗尽而中断。额度恢复后，�
 ## Features / 功能
 
 - Periodically resumes one specified Codex session / 定时恢复指定 Codex 会话
+- Manage one, multiple, or imported local sessions / 管理单个、多个或导入本机全部会话
 - Local dashboard at `http://127.0.0.1:8765` / 本地网页控制台
 - Configurable retry interval / 可设置重试间隔
 - Starts automatically after login on macOS and Windows / 登录系统后自动启动
@@ -24,6 +25,7 @@ Codex 长任务可能因为 5 小时额度耗尽而中断。额度恢复后，�
 - Uses the `workspace-write` sandbox / 使用 `workspace-write` 沙箱
 - Uninstaller included / 附带卸载程序
 - Settings can be changed from the dashboard without reinstalling / 可在页面修改配置，无需重新安装
+- Each session has independent enablement, interval, state, and logs / 每个会话独立启用、间隔、状态和日志
 
 ## Requirements / 系统要求
 
@@ -82,6 +84,13 @@ The dashboard shows:
 - Attempt count and logs
 - Retry now, pause/resume, and reset controls
 - Edit session ID, workspace, and retry interval without reinstalling
+- Add or remove multiple sessions
+- Import all sessions found in the local Codex session index
+- Enable or pause every imported session in one click
+
+For safety, sessions imported with **Import local sessions** are paused by default. Review their workspace and enable only the tasks you want to resume. “Enable all” is an explicit user action; the tool never silently executes every historical conversation.
+
+为安全起见，“导入本机会话”得到的任务默认暂停。请先检查任务目录，再启用需要续跑的任务。“全部启用”必须由用户主动点击，工具不会静默执行所有历史对话。
 
 The server listens only on `127.0.0.1`; it is not directly exposed to the LAN or internet.
 
