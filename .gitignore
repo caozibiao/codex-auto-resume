@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+config.json
+status.json
+attempts.log
+service.log
+service-error.log
