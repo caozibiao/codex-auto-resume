@@ -89,19 +89,35 @@ def update_task_state(session_id, **changes):
         save_state()
 
 
-def append_log(session_id, text):
+def task_log_path(session_id):
     safe = "".join(c for c in session_id if c.isalnum() or c in "-_")
-    with (LOG_DIR / f"{safe}.log").open("a", encoding="utf-8") as handle:
+    return LOG_DIR / f"{safe}.log"
+
+
+def append_log(session_id, text):
+    with task_log_path(session_id).open("a", encoding="utf-8") as handle:
         stamp = datetime.now().astimezone().isoformat(timespec="seconds")
         handle.write(f"\n[{stamp}] {text}\n")
 
 
 def read_log(session_id):
-    safe = "".join(c for c in session_id if c.isalnum() or c in "-_")
     try:
-        return (LOG_DIR / f"{safe}.log").read_text(encoding="utf-8")[-30000:]
+        return task_log_path(session_id).read_text(encoding="utf-8")[-30000:]
     except Exception:
         return ""
+
+
+def move_task_log(old_id, new_id):
+    old_path, new_path = task_log_path(old_id), task_log_path(new_id)
+    if old_path == new_path or not old_path.exists():
+        return
+    if new_path.exists():
+        old_text = old_path.read_text(encoding="utf-8")
+        with new_path.open("a", encoding="utf-8") as handle:
+            handle.write(old_text)
+        old_path.unlink()
+    else:
+        old_path.replace(new_path)
 
 
 def attempt(session_id):
@@ -201,7 +217,7 @@ PAGE = r'''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta n
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const fmt=x=>x?new Date(x*1000).toLocaleString():'—';let current=null,cache=[];
 async function api(data){const r=await fetch('/api/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const o=await r.json();if(!r.ok)alert(o.error||'操作失败');return o}
 async function refresh(){const s=await(await fetch('/api/status')).json();cache=s.tasks;tasks.innerHTML=s.tasks.length?s.tasks.map(t=>`<div class="task"><div class="row"><div><b>${esc(t.name||t.id)}</b><div class="meta">${esc(t.id)} · ${esc(t.workspace)}</div></div><span class="pill ${t.running||t.enabled?'on':''}">${t.running?'运行中':t.completed?'已完成':t.enabled?'等待中':'已暂停'}</span></div><div class="meta" style="margin-top:8px">${esc(t.last_message)} · 尝试 ${t.attempts} 次 · 下次 ${fmt(t.next_attempt)}</div><div class="actions"><button onclick="act('retry','${t.id}')">立即重试</button><button class="alt" onclick="act('toggle','${t.id}')">${t.enabled?'暂停':'启用'}</button><button class="alt" onclick="editTask('${t.id}')">设置</button><button class="alt" onclick="showLog('${t.id}')">日志</button><button class="red" onclick="removeTask('${t.id}')">删除</button></div></div>`).join(''):'<div class="meta" style="margin-top:15px">暂无任务，点击“添加会话”或“导入本机会话”。</div>'}
-async function act(action,id){await api({action,id});refresh()}async function toggleAll(enabled){await api({action:'toggle_all',enabled});refresh()}function showAdd(){current=null;formTitle.textContent='添加会话';nameInput.value='';idInput.value='';workspaceInput.value='';minutesInput.value=60;formCard.classList.remove('hidden')}function editTask(id){current=id;const t=cache.find(x=>x.id===id);formTitle.textContent='编辑会话';nameInput.value=t.name||'';idInput.value=t.id;idInput.disabled=true;workspaceInput.value=t.workspace;minutesInput.value=t.interval_minutes;formCard.classList.remove('hidden')}function hideForm(){idInput.disabled=false;formCard.classList.add('hidden')}async function saveTask(){const o=await api({action:current?'edit':'add',id:current||idInput.value.trim(),name:nameInput.value.trim(),workspace:workspaceInput.value.trim(),interval_minutes:Number(minutesInput.value)});if(o.ok){hideForm();refresh()}}async function removeTask(id){if(confirm('删除这个自动续跑任务？不会删除原 Codex 会话。')){await api({action:'remove',id});refresh()}}async function showLog(id){const s=await(await fetch('/api/log?id='+encodeURIComponent(id))).json();logTitle.textContent='日志 · '+id;logText.textContent=s.log||'暂无日志';logCard.classList.remove('hidden')}async function discover(){const o=await api({action:'import_all'});alert(`已导入 ${o.imported} 个新会话。为安全起见，新导入任务默认暂停。`);refresh()}refresh();setInterval(refresh,4000);
+async function act(action,id){await api({action,id});refresh()}async function toggleAll(enabled){await api({action:'toggle_all',enabled});refresh()}function showAdd(){current=null;formTitle.textContent='添加会话';nameInput.value='';idInput.value='';workspaceInput.value='';minutesInput.value=60;formCard.classList.remove('hidden')}function editTask(id){current=id;const t=cache.find(x=>x.id===id);formTitle.textContent='编辑会话';nameInput.value=t.name||'';idInput.value=t.id;workspaceInput.value=t.workspace;minutesInput.value=t.interval_minutes;formCard.classList.remove('hidden')}function hideForm(){formCard.classList.add('hidden')}async function saveTask(){const newId=idInput.value.trim();const o=await api({action:current?'edit':'add',id:current||newId,new_id:newId,name:nameInput.value.trim(),workspace:workspaceInput.value.trim(),interval_minutes:Number(minutesInput.value)});if(o.ok){hideForm();refresh()}}async function removeTask(id){if(confirm('删除这个自动续跑任务？不会删除原 Codex 会话。')){await api({action:'remove',id});refresh()}}async function showLog(id){const s=await(await fetch('/api/log?id='+encodeURIComponent(id))).json();logTitle.textContent='日志 · '+id;logText.textContent=s.log||'暂无日志';logCard.classList.remove('hidden')}async function discover(){const o=await api({action:'import_all'});alert(`已导入 ${o.imported} 个新会话。为安全起见，新导入任务默认暂停。`);refresh()}refresh();setInterval(refresh,4000);
 </script></body></html>'''
 
 
@@ -232,19 +248,33 @@ class Handler(BaseHTTPRequestHandler):
             size = min(int(self.headers.get("Content-Length", 0)), 100000)
             payload = json.loads(self.rfile.read(size)); action = payload.get("action"); session_id = payload.get("id")
             if action in ("add", "edit"):
-                name = str(payload.get("name") or session_id).strip(); workspace = str(payload.get("workspace", "")).strip()
+                new_id = str(payload.get("new_id") or session_id or "").strip()
+                name = str(payload.get("name") or new_id).strip(); workspace = str(payload.get("workspace", "")).strip()
                 minutes = int(payload.get("interval_minutes", 0))
-                if not session_id or len(session_id) < 8: raise ValueError("会话 ID 无效")
+                if len(new_id) < 8: raise ValueError("会话 ID 无效")
                 if not os.path.isdir(workspace): raise ValueError("任务目录不存在")
                 if minutes < 1 or minutes > 1440: raise ValueError("重试间隔应为 1–1440 分钟")
-                with config_lock:
+                with config_lock, state_lock:
                     existing = next((x for x in config["tasks"] if x["id"] == session_id), None)
-                    if action == "add" and existing: raise ValueError("该会话已经存在")
+                    duplicate = next((x for x in config["tasks"] if x["id"] == new_id and x is not existing), None)
+                    if action == "add" and (existing or duplicate): raise ValueError("该会话已经存在")
+                    if action == "edit" and not existing: raise ValueError("原会话不存在，请刷新页面后重试")
+                    if duplicate: raise ValueError("新的会话 ID 已经存在")
+                    if action == "edit" and session_id != new_id:
+                        old_state = state["tasks"].get(session_id, blank_task_state())
+                        if old_state.get("running"):
+                            raise ValueError("任务正在运行，请等待本次执行结束后再修改会话 ID")
+                        existing["id"] = new_id
+                        state["tasks"].pop(session_id, None)
+                        state["tasks"][new_id] = old_state
+                        move_task_log(session_id, new_id)
                     if existing: existing.update(name=name, workspace=workspace, interval_seconds=minutes * 60)
-                    else: config["tasks"].append({"id": session_id, "name": name, "workspace": workspace,
+                    else: config["tasks"].append({"id": new_id, "name": name, "workspace": workspace,
                                                    "interval_seconds": minutes * 60, "enabled": False})
                     save_config()
-                update_task_state(session_id, completed=False, next_attempt=time.time() + minutes * 60)
+                    state["tasks"].setdefault(new_id, blank_task_state()).update(
+                        completed=False, next_attempt=time.time() + minutes * 60)
+                    save_state()
             elif action == "remove":
                 with config_lock:
                     config["tasks"] = [x for x in config["tasks"] if x["id"] != session_id]; save_config()
